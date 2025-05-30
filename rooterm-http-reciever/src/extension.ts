@@ -62,7 +62,6 @@ function initServer(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration("httpReceiver");
   const port = config.get<number>("port", 9421);
   const channel = vscode.window.createOutputChannel("RooTerm HTTP Receiver");
-  channel.appendLine(`RooTerm HTTP Receiver is starting on port ${port}...`);
 
   let api: RooCodeAPI;
   try {

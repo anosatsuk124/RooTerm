@@ -1,8 +1,14 @@
 {
   "name": "rooterm-http-reciever",
   "displayName": "RooTerm HTTP Reciever",
+  "publisher": "anosatsuk124",
   "description": "",
   "version": "0.0.1",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anosatsuk124/RooTerm.git"
+  },
   "engines": {
     "vscode": "^1.100.0"
   },
