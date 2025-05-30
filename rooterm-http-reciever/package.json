@@ -15,13 +15,15 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:rooterm-http-reciever.start-server"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "rooterm-http-reciever.start-server",
-        "title": "Start HTTP Server"
+        "title": "Start WebSocket Server"
       }
     ]
   },
@@ -43,21 +45,23 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
+    "@types/node": "^22.15.29",
     "@types/vscode": "^1.100.0",
+    "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^2.15.0",
     "esbuild": "^0.25.3",
     "eslint": "^9.25.1",
     "npm-run-all": "^4.1.5",
-    "typescript": "^5.8.3",
-    "vsce": "^2.15.0"
+    "typescript": "^5.8.3"
   },
-  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39",
   "dependencies": {
     "@roo-code/types": "^1.22.0",
+    "ws": "^8.13.0",
     "zod": "^3.25.42"
-  }
+  },
+  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
 }

@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import * as http from "http";
-import { ClineMessage, RooCodeAPI } from "@roo-code/types";
+import { WebSocketServer } from "ws";
+import { RooCodeAPI } from "@roo-code/types";
 
 interface Payload {
   message: string;
@@ -27,35 +27,57 @@ function getRooCodeAPI(): RooCodeAPI {
 function subscribeToRooCodeMessages(
   api: RooCodeAPI,
   channel: vscode.OutputChannel,
+  wss: WebSocketServer,
 ): void {
-  api.on(
-    "message",
-    (event: {
-      taskId: string;
-      action: "created" | "updated";
-      message: ClineMessage;
-    }) => {
-      channel.appendLine(
-        `(ID: ${event.taskId}) Received message from RooCode:`,
-      );
-      channel.appendLine(JSON.stringify(event.message, null, 2));
-    },
-  );
-}
-
-function readRequestBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let body = "";
-    req.on("data", (chunk) => {
-      body += chunk;
-    });
-    req.on("end", () => {
-      resolve(body);
-    });
-    req.on("error", (err) => {
-      reject(err);
+  api.on("message", (event) => {
+    channel.appendLine(`(ID: ${event.taskId}) Received message from RooCode:`);
+    channel.appendLine(JSON.stringify(event.message, null, 2));
+    // WebSocket クライアント全員にブロードキャスト
+    wss.clients.forEach((client) => {
+      if (client.readyState === client.OPEN) {
+        client.send(JSON.stringify(event));
+      }
     });
   });
+}
+
+function setupWebSocketServer(
+  api: RooCodeAPI,
+  channel: vscode.OutputChannel,
+  context: vscode.ExtensionContext,
+  port: number,
+): void {
+  const wss = new WebSocketServer({ port, host: "127.0.0.1" });
+  subscribeToRooCodeMessages(api, channel, wss);
+
+  wss.on("connection", (socket) => {
+    socket.on("message", (data) => {
+      try {
+        const { message, time } = JSON.parse(data.toString()) as Payload;
+        channel.appendLine(`Received at ${time}: ${message}`);
+        vscode.window.showInformationMessage(`Received at ${time}: ${message}`);
+        api.sendMessage(message);
+        socket.send("OK");
+      } catch (err) {
+        channel.appendLine(
+          `Error handling message: ${err instanceof Error ? err.message : err}`,
+        );
+        socket.send("Invalid JSON");
+      }
+    });
+  });
+
+  wss.on("error", (err) => {
+    vscode.window.showErrorMessage(`WebSocket Server error: ${err.message}`);
+  });
+
+  wss.on("listening", () => {
+    channel.appendLine(
+      `RooTerm WebSocket Receiver listening on ws://127.0.0.1:${port}/`,
+    );
+  });
+
+  context.subscriptions.push({ dispose: () => wss.close() });
 }
 
 function initServer(context: vscode.ExtensionContext): void {
@@ -66,7 +88,7 @@ function initServer(context: vscode.ExtensionContext): void {
   let api: RooCodeAPI;
   try {
     api = getRooCodeAPI();
-    subscribeToRooCodeMessages(api, channel);
+    setupWebSocketServer(api, channel, context, port);
   } catch (err) {
     const message =
       err instanceof Error
@@ -77,43 +99,6 @@ function initServer(context: vscode.ExtensionContext): void {
     );
     return;
   }
-
-  const server = http.createServer(async (req, res) => {
-    if (req.method === "POST" && req.url === "/") {
-      try {
-        const body = await readRequestBody(req);
-        const data = JSON.parse(body) as Payload;
-        channel.appendLine(`Received at ${data.time}: ${data.message}`);
-        vscode.window.showInformationMessage(
-          `Received at ${data.time}: ${data.message}`,
-        );
-        api.sendMessage(data.message);
-        res.writeHead(200, { "Content-Type": "text/plain" });
-        res.end("OK");
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        channel.appendLine(`Error handling request: ${message}`);
-        console.error(err);
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end("Invalid JSON");
-      }
-    } else {
-      res.writeHead(404);
-      res.end();
-    }
-  });
-
-  server.on("error", (err) => {
-    vscode.window.showErrorMessage(`RooTerm HTTP Server error: ${err.message}`);
-  });
-
-  server.listen(port, "127.0.0.1", () => {
-    channel.appendLine(
-      `RooTerm HTTP Receiver listening on http://127.0.0.1:${port}/`,
-    );
-  });
-
-  context.subscriptions.push({ dispose: () => server.close() });
 }
 
 export function activate(context: vscode.ExtensionContext): void {
