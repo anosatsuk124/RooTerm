@@ -52,12 +52,19 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Write error: %v\n", err)
 			break
 		}
-		_, resp, err := conn.ReadMessage()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Read error: %v\n", err)
-			break
+
+	read:
+		for {
+			_, resp, err := conn.ReadMessage()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Read error: %v\n", err)
+				break read
+			}
+			if len(resp) == 0 {
+				break read
+			}
+			fmt.Printf("%s\n", resp)
 		}
-		fmt.Printf("Server response: %s\n", resp)
 	}
 	fmt.Println("Disconnected.")
 }

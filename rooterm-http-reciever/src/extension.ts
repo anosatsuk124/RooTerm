@@ -34,7 +34,7 @@ function subscribeToRooCodeMessages(
     channel.appendLine(JSON.stringify(event.message, null, 2));
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
-        client.send(JSON.stringify(event));
+        client.send(event.message.text!);
       }
     });
   });
