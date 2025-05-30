@@ -7,6 +7,11 @@ interface Payload {
   time: string;
 }
 
+interface ChatPayload {
+  is_reasoning: boolean;
+  message: string;
+}
+
 function getRooCodeAPI(): RooCodeAPI {
   const extension = vscode.extensions.getExtension<RooCodeAPI>(
     "RooVeterinaryInc.roo-cline",
@@ -34,7 +39,14 @@ function subscribeToRooCodeMessages(
     channel.appendLine(JSON.stringify(event.message, null, 2));
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
-        client.send(event.message.text!);
+        if (event.message.text) {
+          const isReasoning = event.message.say === "reasoning";
+          const payload: ChatPayload = {
+            is_reasoning: isReasoning,
+            message: event.message.text,
+          };
+          client.send(JSON.stringify(payload));
+        }
       }
     });
   });
@@ -55,7 +67,6 @@ function setupWebSocketServer(
         const { message, time } = JSON.parse(data.toString()) as Payload;
         channel.appendLine(`Received at ${time}: ${message}`);
         api.sendMessage(message);
-        socket.send("OK");
       } catch (err) {
         channel.appendLine(
           `Error handling message: ${err instanceof Error ? err.message : err}`,
