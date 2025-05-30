@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as http from "http";
-import { RooCodeAPI } from "@roo-code/types";
+import { ClineMessage, RooCodeAPI } from "@roo-code/types";
 
 interface Payload {
   message: string;
@@ -28,10 +28,19 @@ function subscribeToRooCodeMessages(
   api: RooCodeAPI,
   channel: vscode.OutputChannel,
 ): void {
-  api.on("message", (event: unknown) => {
-    channel.appendLine("Received message from RooCode:");
-    channel.appendLine(JSON.stringify(event, null, 2));
-  });
+  api.on(
+    "message",
+    (event: {
+      taskId: string;
+      action: "created" | "updated";
+      message: ClineMessage;
+    }) => {
+      channel.appendLine(
+        `(ID: ${event.taskId}) Received message from RooCode:`,
+      );
+      channel.appendLine(JSON.stringify(event.message, null, 2));
+    },
+  );
 }
 
 function readRequestBody(req: http.IncomingMessage): Promise<string> {
