@@ -2,68 +2,93 @@ import * as vscode from "vscode";
 import * as http from "http";
 import { RooCodeAPI } from "@roo-code/types";
 
-const getRooCodeAPI = (): RooCodeAPI => {
-  const rooCodeExtension = vscode.extensions.getExtension<RooCodeAPI>(
+interface Payload {
+  message: string;
+  time: string;
+}
+
+function getRooCodeAPI(): RooCodeAPI {
+  const extension = vscode.extensions.getExtension<RooCodeAPI>(
     "RooVeterinaryInc.roo-cline",
   );
-
-  if (!rooCodeExtension?.isActive) {
-    throw new Error("Extension is not activated");
+  if (!extension) {
+    throw new Error("RooCode extension is not installed");
   }
-
-  const rooCodeApi: RooCodeAPI = rooCodeExtension.exports;
-
-  if (!rooCodeApi) {
-    throw new Error("API is not available");
+  if (!extension.isActive) {
+    throw new Error("RooCode extension is not activated");
   }
+  const api = extension.exports;
+  if (!api) {
+    throw new Error("RooCode API is not available");
+  }
+  return api;
+}
 
-  return rooCodeApi;
-};
-
-function initServer(context: vscode.ExtensionContext) {
-  const config = vscode.workspace.getConfiguration("httpReceiver");
-  const port: number = config.get("port", 9421);
-
-  const outputChannel = vscode.window.createOutputChannel(
-    "RooTerm HTTP Receiver",
-  );
-
-  outputChannel.appendLine(
-    `RooTerm HTTP Receiver is starting on port ${port}...`,
-  );
-
-  const rooCodeApi = getRooCodeAPI();
-
-  // FIXME:
-  rooCodeApi.on("message", (event: unknown) => {
-    outputChannel.appendLine("Received message from RooCode:");
-    outputChannel.appendLine(JSON.stringify(event, null, 2));
+function subscribeToRooCodeMessages(
+  api: RooCodeAPI,
+  channel: vscode.OutputChannel,
+): void {
+  api.on("message", (event: unknown) => {
+    channel.appendLine("Received message from RooCode:");
+    channel.appendLine(JSON.stringify(event, null, 2));
   });
+}
 
-  // Create RooTerm HTTP server
-  const server = http.createServer((req, res) => {
+function readRequestBody(req: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      resolve(body);
+    });
+    req.on("error", (err) => {
+      reject(err);
+    });
+  });
+}
+
+function initServer(context: vscode.ExtensionContext): void {
+  const config = vscode.workspace.getConfiguration("httpReceiver");
+  const port = config.get<number>("port", 9421);
+  const channel = vscode.window.createOutputChannel("RooTerm HTTP Receiver");
+  channel.appendLine(`RooTerm HTTP Receiver is starting on port ${port}...`);
+
+  let api: RooCodeAPI;
+  try {
+    api = getRooCodeAPI();
+    subscribeToRooCodeMessages(api, channel);
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Unknown error during API initialization";
+    vscode.window.showErrorMessage(
+      `Failed to initialize RooCode API: ${message}`,
+    );
+    return;
+  }
+
+  const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/") {
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", () => {
-        try {
-          const data = JSON.parse(body) as { message: string; time: string };
-          // Show the received message in VSCode
-          vscode.window.showInformationMessage(
-            `Received at ${data.time}: ${data.message}`,
-          );
-          res.writeHead(200, { "Content-Type": "text/plain" });
-          res.end("OK");
-
-          rooCodeApi.sendMessage(data.message);
-        } catch (err) {
-          console.error("Failed to parse JSON", err);
-          res.writeHead(400, { "Content-Type": "text/plain" });
-          res.end("Invalid JSON");
-        }
-      });
+      try {
+        const body = await readRequestBody(req);
+        const data = JSON.parse(body) as Payload;
+        channel.appendLine(`Received at ${data.time}: ${data.message}`);
+        vscode.window.showInformationMessage(
+          `Received at ${data.time}: ${data.message}`,
+        );
+        api.sendMessage(data.message);
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("OK");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        channel.appendLine(`Error handling request: ${message}`);
+        console.error(err);
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end("Invalid JSON");
+      }
     } else {
       res.writeHead(404);
       res.end();
@@ -75,21 +100,22 @@ function initServer(context: vscode.ExtensionContext) {
   });
 
   server.listen(port, "127.0.0.1", () => {
-    console.log(`RooTerm HTTP Receiver listening on http://127.0.0.1:${port}/`);
+    channel.appendLine(
+      `RooTerm HTTP Receiver listening on http://127.0.0.1:${port}/`,
+    );
   });
 
-  // Dispose server on extension deactivation
-  context.subscriptions.push({
-    dispose: () => {
-      server.close();
+  context.subscriptions.push({ dispose: () => server.close() });
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+  const disposable = vscode.commands.registerCommand(
+    "rooterm-http-reciever.start-server",
+    () => {
+      initServer(context);
     },
-  });
-}
-
-export function activate(context: vscode.ExtensionContext) {
-  vscode.commands.registerCommand("rooterm-http-reciever.start-server", () =>
-    initServer(context),
   );
+  context.subscriptions.push(disposable);
 }
 
-export function deactivate() {}
+export function deactivate(): void {}
