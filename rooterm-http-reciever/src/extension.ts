@@ -32,7 +32,6 @@ function subscribeToRooCodeMessages(
   api.on("message", (event) => {
     channel.appendLine(`(ID: ${event.taskId}) Received message from RooCode:`);
     channel.appendLine(JSON.stringify(event.message, null, 2));
-    // WebSocket クライアント全員にブロードキャスト
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
         client.send(JSON.stringify(event));
@@ -55,7 +54,6 @@ function setupWebSocketServer(
       try {
         const { message, time } = JSON.parse(data.toString()) as Payload;
         channel.appendLine(`Received at ${time}: ${message}`);
-        vscode.window.showInformationMessage(`Received at ${time}: ${message}`);
         api.sendMessage(message);
         socket.send("OK");
       } catch (err) {
@@ -83,7 +81,9 @@ function setupWebSocketServer(
 function initServer(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration("httpReceiver");
   const port = config.get<number>("port", 9421);
-  const channel = vscode.window.createOutputChannel("RooTerm HTTP Receiver");
+  const channel = vscode.window.createOutputChannel(
+    "RooTerm WebSocket Receiver",
+  );
 
   let api: RooCodeAPI;
   try {
