@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { WebSocketServer } from "ws";
 import { RooCodeAPI } from "@roo-code/types";
+import { HttpServer } from "./server/HttpServer";
 
 interface Payload {
   message: string;
@@ -52,42 +53,6 @@ function subscribeToRooCodeMessages(
   });
 }
 
-function setupWebSocketServer(
-  api: RooCodeAPI,
-  channel: vscode.OutputChannel,
-  context: vscode.ExtensionContext,
-  port: number,
-): void {
-  const wss = new WebSocketServer({ port, host: "127.0.0.1" });
-  subscribeToRooCodeMessages(api, channel, wss);
-
-  wss.on("connection", (socket) => {
-    socket.on("message", (data) => {
-      try {
-        const { message, time } = JSON.parse(data.toString()) as Payload;
-        channel.appendLine(`Received at ${time}: ${message}`);
-        api.sendMessage(message);
-      } catch (err) {
-        channel.appendLine(
-          `Error handling message: ${err instanceof Error ? err.message : err}`,
-        );
-        socket.send("Invalid JSON");
-      }
-    });
-  });
-
-  wss.on("error", (err) => {
-    vscode.window.showErrorMessage(`WebSocket Server error: ${err.message}`);
-  });
-
-  wss.on("listening", () => {
-    channel.appendLine(
-      `RooTerm WebSocket Receiver listening on ws://127.0.0.1:${port}/`,
-    );
-  });
-
-  context.subscriptions.push({ dispose: () => wss.close() });
-}
 
 function initServer(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration("httpReceiver");
@@ -99,7 +64,7 @@ function initServer(context: vscode.ExtensionContext): void {
   let api: RooCodeAPI;
   try {
     api = getRooCodeAPI();
-    setupWebSocketServer(api, channel, context, port);
+    new HttpServer(port, '127.0.0.1', api, channel, context);
   } catch (err) {
     const message =
       err instanceof Error
